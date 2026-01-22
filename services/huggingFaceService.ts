@@ -1,7 +1,7 @@
 
 import { Caption } from "../types";
 
-const HF_TOKEN = process.env.API_KEY || "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";
+const HF_TOKEN = process.env.API_KEY || "";
 
 /**
  * Generic fetch for Hugging Face Inference API

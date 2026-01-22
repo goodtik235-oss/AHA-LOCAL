@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Bridges Netlify environment variables to the browser context
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
+    // Bridges Netlify environment variables to the browser context during build
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
   },
   build: {
     outDir: 'dist',
