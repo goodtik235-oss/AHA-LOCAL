@@ -1,0 +1,5 @@
+{
+  "name": "LOCAL ",
+  "description": "A world-class AI-powered video localization platform that extracts captions, translates them into multiple languages, and generates high-fidelity AI voiceovers using the Gemini API.",
+  "requestFramePermissions": []
+}
