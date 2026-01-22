@@ -9,7 +9,7 @@ import CaptionEditor from './components/CaptionEditor';
 import StatsChart from './components/StatsChart';
 import { Caption, ProcessingStatus, SUPPORTED_LANGUAGES } from './types';
 import { extractAudioFromVideo, decodeBase64, decodePcmToAudioBuffer } from './services/audioUtils';
-import { transcribeAudio, translateCaptions, generateSpeech } from './services/geminiService';
+import { transcribeAudio, translateCaptions, generateSpeech } from './services/huggingFaceService';
 import { renderVideoWithCaptions } from './services/videoRenderer';
 
 function App() {
@@ -74,7 +74,7 @@ function App() {
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setStatus(ProcessingStatus.ERROR);
-      setErrorMsg(err.message || "Transcription failed.");
+      setErrorMsg(err.message || "Whisper Transcription failed.");
     }
   };
 
@@ -92,7 +92,7 @@ function App() {
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setStatus(ProcessingStatus.ERROR);
-      setErrorMsg("Translation failed.");
+      setErrorMsg("NLLB Translation failed.");
     }
   };
 
@@ -106,14 +106,24 @@ function App() {
       const audioBase64 = await generateSpeech(fullText, controller.signal);
       const uint8 = decodeBase64(audioBase64);
       if (!audioContextRef.current) audioContextRef.current = new AudioContext();
-      const buffer = await decodePcmToAudioBuffer(uint8, audioContextRef.current);
+      
+      // Note: MMS TTS often returns standard wav headers, decodeAudioData might be safer 
+      // but for consistency with your existing pipeline we use your PCM decoder.
+      // If HF returns a standard wav, we use the browser's native decoder.
+      let buffer;
+      try {
+        buffer = await audioContextRef.current.decodeAudioData(uint8.buffer);
+      } catch {
+        buffer = await decodePcmToAudioBuffer(uint8, audioContextRef.current);
+      }
+      
       setDubbedAudioBuffer(buffer);
       setUseDubbing(true);
       setStatus(ProcessingStatus.COMPLETED);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setStatus(ProcessingStatus.ERROR);
-      setErrorMsg("Dubbing failed.");
+      setErrorMsg("MMS TTS Dubbing failed.");
     }
   };
 
@@ -150,7 +160,7 @@ function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `AHA_Studio_${Date.now()}.webm`;
+      a.download = `AHA_Studio_HF_Export_${Date.now()}.webm`;
       a.click();
       setStatus(ProcessingStatus.COMPLETED);
     } catch (err: any) {
@@ -171,12 +181,12 @@ function App() {
             <Sparkles className="absolute inset-0 m-auto text-indigo-400 w-10 h-10 animate-bounce" />
           </div>
           <h2 className="text-4xl font-black mb-4 tracking-tighter">
-            {isRendering ? 'Rendering Masterpiece' : 'AHA Studio AI at work'}
+            {isRendering ? 'Rendering Masterpiece' : 'AHA Studio AI (Hugging Face)'}
           </h2>
           <p className="text-slate-400 max-w-md text-center text-lg mb-10">
-            {status === ProcessingStatus.TRANSCRIBING ? 'Analyzing audio landscape...' : 
-             status === ProcessingStatus.TRANSLATING ? 'Applying linguistic synthesis...' :
-             status === ProcessingStatus.GENERATING_SPEECH ? 'Cloning vocal frequencies...' :
+            {status === ProcessingStatus.TRANSCRIBING ? 'Whisper V3 is listening...' : 
+             status === ProcessingStatus.TRANSLATING ? 'Synthesizing NLLB translation...' :
+             status === ProcessingStatus.GENERATING_SPEECH ? 'Generating MMS vocal patterns...' :
              `Processing content: ${Math.round(renderingProgress * 100)}%`}
           </p>
           {isRendering && (
@@ -197,9 +207,12 @@ function App() {
           </div>
           <h1 className="text-2xl font-black tracking-tighter">AHA STUDIO</h1>
         </div>
-        <button onClick={() => videoInputRef.current?.click()} className="flex items-center space-x-2 px-8 py-3 bg-indigo-500 hover:bg-indigo-400 rounded-2xl font-bold transition-transform active:scale-95">
-          <Upload size={18} /> <span>{videoFile ? 'Change Project' : 'New Project'}</span>
-        </button>
+        <div className="flex items-center space-x-4">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">HF Inference Engine</span>
+          <button onClick={() => videoInputRef.current?.click()} className="flex items-center space-x-2 px-8 py-3 bg-indigo-500 hover:bg-indigo-400 rounded-2xl font-bold transition-transform active:scale-95">
+            <Upload size={18} /> <span>{videoFile ? 'Change Project' : 'New Project'}</span>
+          </button>
+        </div>
         <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={handleFileUpload} />
       </header>
 
@@ -215,7 +228,7 @@ function App() {
                   <Wand2 size={24} />
                 </div>
                 <h3 className="text-xl font-bold mb-2">1. Transcribe</h3>
-                <p className="text-sm text-slate-500 mb-6">Extract pixel-perfect subtitles with AI.</p>
+                <p className="text-sm text-slate-500 mb-6">Whisper V3 high-fidelity transcription.</p>
                 <button onClick={handleGenerateCaptions} disabled={!videoFile || isProcessing} className="w-full py-4 bg-slate-800 hover:bg-indigo-500 rounded-2xl font-bold text-sm transition-all disabled:opacity-30">
                   Analyze Content
                 </button>
@@ -231,7 +244,7 @@ function App() {
                   {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                 </select>
                 <button onClick={handleTranslate} disabled={captions.length === 0 || isProcessing} className="w-full py-4 bg-purple-500 hover:bg-purple-400 rounded-2xl font-bold text-sm transition-all disabled:opacity-30">
-                  Localize Text
+                  NLLB Translation
                 </button>
               </div>
 
@@ -241,9 +254,9 @@ function App() {
                   <Mic size={24} />
                 </div>
                 <h3 className="text-xl font-bold mb-2">3. AI Dub</h3>
-                <p className="text-sm text-slate-500 mb-6">Clone vocals for international audiences.</p>
+                <p className="text-sm text-slate-500 mb-6">MMS Neural speech synthesis.</p>
                 <button onClick={handleDubbing} disabled={captions.length === 0 || isProcessing} className="w-full py-4 bg-pink-500 hover:bg-pink-400 rounded-2xl font-bold text-sm transition-all disabled:opacity-30">
-                  Synthesize Voice
+                  Generate Voice
                 </button>
               </div>
 
@@ -273,7 +286,7 @@ function App() {
               <div className="p-8 bg-red-500/5 border border-red-500/20 rounded-[2.5rem] flex items-start space-x-6 animate-in zoom-in-95 duration-300">
                 <div className="bg-red-500/10 p-4 rounded-2xl text-red-400"><AlertTriangle size={24} /></div>
                 <div>
-                  <h4 className="text-xl font-black text-red-400 tracking-tighter mb-1">System Alert</h4>
+                  <h4 className="text-xl font-black text-red-400 tracking-tighter mb-1">HF Studio Alert</h4>
                   <p className="text-red-300/60 font-medium">{errorMsg}</p>
                 </div>
               </div>
